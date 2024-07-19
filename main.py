@@ -1,27 +1,13 @@
 import sys
-import threading
-from PyQt5.QtWidgets import QApplication
-from src.transparent_window import TransparentWindow, Communicator
-from src.continuous_translation import ContinuousTranslation
-from dotenv import load_dotenv
+from PySide6 import QtWidgets
 
-load_dotenv()
+from src.Translationgui import TranslationGUI
 
-def start_translation():
-    app = QApplication(sys.argv)
-
-    window = TransparentWindow()
-    window.show()
-
-    communicator = Communicator()
-
-    translator = ContinuousTranslation(communicator)
-    communicator.signal.connect(window.update_text)
-
-    translation_thread = threading.Thread(target=translator.translation_continuous, daemon=True)
-    translation_thread.start()
-
-    sys.exit(app.exec_())
+def main():
+    app = QtWidgets.QApplication(sys.argv)
+    gui = TranslationGUI()
+    gui.show()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
-    start_translation()
+    main()

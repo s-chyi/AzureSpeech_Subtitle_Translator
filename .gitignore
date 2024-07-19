@@ -1,6 +1,8 @@
 .env
+code
 __pycache__
 test_data
 log
+logs
 old
 output
