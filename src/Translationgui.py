@@ -7,15 +7,18 @@ from threading import Thread, Event
 from re import finditer
 
 NAME = "Azure_Dr. George Westerman"
+ZH_FONT_SIZE = [48, 24] 
+EN_FONT_SIZE = [48, 28]
 
 class CH2ENGUI(BaseGUI):
     def __init__(self):
         super().__init__("CaptionCraft", 1024, 768)
         self.setup_ui()
+        self.ZH_FONT_SIZE = ZH_FONT_SIZE[0]
+        self.EN_FONT_SIZE = EN_FONT_SIZE[0]
 
     def setup_ui(self):
         self.main_layout = QtWidgets.QVBoxLayout(self)
-        # self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.addWidget(self.scroll_area_top, 1)
         self.scroll_area_bottom.setVisible(False) 
 
@@ -37,6 +40,8 @@ class TranslationGUI(BaseGUI):
         super().__init__("CaptionCraft", 1024, 768)
         self.translation = ContinuousTranslation(self.updateTextSignal)
         Thread(target=self.translation.translation_continuous, daemon=True).start()
+        self.ZH_FONT_SIZE = ZH_FONT_SIZE[0]
+        self.EN_FONT_SIZE = EN_FONT_SIZE[0]
         self.ch2en_window = None
 
         self.control_window = ControlWindow()
@@ -55,11 +60,9 @@ class TranslationGUI(BaseGUI):
         self.control_window.window_button.setDisabled(False)
 
     def start_translation(self):
-        if self.ch2en_window: self.ch2en_window.full_en_text = self.full_en_text 
-        # self.ch2en_window.type_string("", "")
+        if self.ch2en_window:
+            self.ch2en_window.full_en_text = self.full_en_text 
         self.translation.is_paused.clear()
-        # self.translation.full_en = ""
-        # self.translation.full_ch = ""
         self.control_window.start_button.setDisabled(True)
         self.control_window.pause_button.setDisabled(False)
 
@@ -70,17 +73,13 @@ class TranslationGUI(BaseGUI):
         self.control_window.pause_button.setDisabled(True)
 
     def clear_history(self):
-        self.translation.full_en = ""
-        self.translation.full_ch = ""
-        if self.ch2en_window: self.ch2en_window.type_string("", "")
-        self.type_string("", "")
+        if self.ch2en_window: 
+            self.ch2en_window.type_string("", "")
 
     def export_current_text(self):
         with open(f"output/{NAME}_QA.txt", "a", encoding="utf-8") as text_file:
-            text_file.write(f"Question: \n")
+            text_file.write("Question: \n")
             text_file.write(self.translation.full_ch + "\n" + self.translation.full_en)
-        # self.translation.full_en = ""
-        # self.translation.full_ch = ""
 
     def find_punctuation_index(self, text, forward=True, max_punctuation=3):
         matches = finditer(r"[.!?。！？]", text)
@@ -94,46 +93,39 @@ class TranslationGUI(BaseGUI):
     def split_text_at_index(self, text, index):
         return text[:index-1], text[index:]
 
+    def format_text(self, ch_text: str, en_text: str, ch_prev_text: str = "", en_prev_text: str = "") -> tuple:
+        while True:
+            ch_idx = self.find_punctuation_index(ch_text)
+            en_idx = self.find_punctuation_index(en_text)
+            if not ch_idx and not en_idx: break
+            if ch_idx: ch_prev_text, ch_text = self.split_text_at_index(ch_text, ch_idx)
+            if en_idx: en_prev_text, en_text = self.split_text_at_index(en_text, en_idx)
 
-    def format_text(self, ch_text: str, en_text: str, ch_prev_text: str, en_prev_text: str, full_ch:str, full_en: str):
-        formatted_ch_text = full_ch + "<br>" + ch_text if full_ch else ch_text
-        formatted_en_text = full_en + "<br>" + en_text if full_en else en_text
-        return formatted_ch_text, formatted_en_text
-    
-    # def format_text(self, ch_text: str, en_text: str, ch_prev_text: str = "", en_prev_text: str = "") -> tuple:
-    #     while True:
-    #         ch_idx = self.find_punctuation_index(ch_text)
-    #         en_idx = self.find_punctuation_index(en_text)
-    #         if not ch_idx and not en_idx: break
-    #         if ch_idx: ch_prev_text, ch_text = self.split_text_at_index(ch_text, ch_idx)
-    #         if en_idx: en_prev_text, en_text = self.split_text_at_index(en_text, en_idx)
+        while True:
+            ch_idx = self.find_punctuation_index(ch_prev_text, False, 3)
+            en_idx = self.find_punctuation_index(en_prev_text, False, 3)
+            if not ch_idx and not en_idx: break
+            if ch_idx: _, ch_prev_text = self.split_text_at_index(ch_prev_text, ch_idx) 
+            if en_idx: _, en_prev_text = self.split_text_at_index(en_prev_text, en_idx)
 
-    #     while True:
-    #         ch_idx = self.find_punctuation_index(ch_prev_text, False, 2)
-    #         en_idx = self.find_punctuation_index(en_prev_text, False, 2)
-    #         if not ch_idx and not en_idx: break
-    #         if ch_idx: _, ch_prev_text = self.split_text_at_index(ch_prev_text, ch_idx) 
-    #         if en_idx: _, en_prev_text = self.split_text_at_index(en_prev_text, en_idx)
+        return ch_text, en_text, ch_prev_text, en_prev_text
 
-    #     return ch_text, en_text, ch_prev_text, en_prev_text
+    def is_synced(self):
+        return len(self.translation.full_ch) == len(self.translation.full_en)
 
-    def update_text(self, ch_text: str, en_text: str, ch_prev_text: str, en_prev_text: str, full_ch:str, full_en: str, is_pause: bool):
-        formatted_ch_text, formatted_en_text = self.format_text(ch_text, en_text, ch_prev_text, en_prev_text, full_ch, full_en)
-        self.type_string(formatted_ch_text, formatted_en_text)
-        if not self.translation.is_paused.is_set() and self.ch2en_window:
-            self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
-        
-        # ch_text, en_text, ch_prev_text, en_prev_text = self.format_text(ch_text, en_text, ch_prev_text, en_prev_text)
-        # formatted_ch_text = ch_prev_text + "<br>" + ch_text if full_ch else ch_text
-        # formatted_en_text = en_prev_text + "<br>" + en_text if full_en else en_text
-        # if self.translation.is_paused.is_set():
-        #     self.type_string(formatted_ch_text, formatted_en_text)
-        #     if self.is_synced:
-        #         self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
-        # else:
-        #     if self.is_synced:
-        #         formatted_ch_text, formatted_en_text = self.ch2en_window.format_text(ch_text, en_text, ch_prev_text, en_prev_text, full_ch, full_en)
-        #         self.type_string(formatted_ch_text, formatted_en_text)
-        #         self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
-        #     else:
-        #         self.type_string(formatted_ch_text, formatted_en_text)
+    def update_text(self, ch_text: str, en_text: str, ch_prev_text: str, en_prev_text: str, full_ch: str, full_en: str, is_pause: bool):
+        ch_text, en_text, ch_prev_text, en_prev_text = self.format_text(ch_text, en_text, ch_prev_text, en_prev_text)
+        formatted_ch_text = ch_prev_text + "<br>" + ch_text if full_ch else ch_text
+        formatted_en_text = en_prev_text + "<br>" + en_text if full_en else en_text
+
+        if self.translation.is_paused.is_set():
+            self.type_string(formatted_ch_text, formatted_en_text)
+            if self.is_synced() and self.ch2en_window:
+                self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
+        else:
+            if self.is_synced() and self.ch2en_window:
+                formatted_ch_text, formatted_en_text = self.ch2en_window.format_text(ch_text, en_text, ch_prev_text, en_prev_text, full_ch, full_en)
+                self.type_string(formatted_ch_text, formatted_en_text)
+                self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
+            else:
+                self.type_string(formatted_ch_text, formatted_en_text)

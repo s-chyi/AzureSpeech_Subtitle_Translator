@@ -2,7 +2,7 @@ from PIL.ImageQt import ImageQt
 from PIL import Image, ImageEnhance
 from PySide6 import QtWidgets, QtGui, QtCore
 
-IMAGE_PATH = "code/AI 07a_00000.jpg" #AI 07a_00000.jpg #AI 07a_00001.jpg #background_new_AI.jpg
+IMAGE_PATH = "code/AI 07a_00001.jpg" #AI 07a_00000.jpg #AI 07a_00001.jpg #background_new_AI.jpg
 ZH_FONT_SIZE = [48, 24] 
 EN_FONT_SIZE = [48, 28]
 
@@ -27,14 +27,26 @@ class BaseGUI(QtWidgets.QWidget):
         self.ZH_FONT_SIZE = ZH_FONT_SIZE[0]
         self.EN_FONT_SIZE = EN_FONT_SIZE[0]
 
+    def calculate_line_count(self, text, font_size, widget_width):
+        font = QtGui.QFont("Times New Roman", font_size)
+        font_metrics = QtGui.QFontMetrics(font)
+        lines = text.split('<br>')  # 按 <br> 分隔行
+        line_count = 0
+
+        for line in lines:
+            line_width = font_metrics.horizontalAdvance(line)
+            line_count += (line_width // widget_width) + 1  # 計算當行包含的字數
+
+        return line_count
+    
     def create_scroll_area(self):
         scroll_area = QtWidgets.QScrollArea(self)
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet(self.scroll_area_stylesheet())
         text_area = QtWidgets.QLabel()
         text_area.setWordWrap(True)
-        text_area.setAlignment(QtCore.Qt.AlignBottom | QtCore.Qt.AlignJustify)
-        text_area.setStyleSheet("background-color: rgba(255, 255, 255, 128); padding: 10px;")
+        text_area.setAlignment(QtCore.Qt.AlignBottom | QtCore.Qt.AlignLeft) # AlignJustify
+        text_area.setStyleSheet("background-color: rgba(255, 255, 255, 230); padding: 10px;")
         scroll_area.setWidget(text_area)
         scroll_area.viewport().setStyleSheet("background-color: rgba(255, 255, 255, 0);")
         return scroll_area, text_area
@@ -68,8 +80,8 @@ class BaseGUI(QtWidgets.QWidget):
         self.scroll_area_bottom.setGeometry(x1, y1_bottom, new_width, new_height)
 
     def format_display_text(self, ch_text: str, en_text: str) -> tuple:
-        formatted_ch_text = f'<p style="font-family: 標楷體; font-size: {self.ZH_FONT_SIZE}px; margin: 0; text-align: center; font-weight: bold;">{ch_text}</p>'
-        formatted_en_text = f'<p style="font-family: Times New Roman; font-size: {self.EN_FONT_SIZE}px; margin: 0; text-align: center; font-weight: bold;">{en_text}</p>'
+        formatted_ch_text = f'<p style="font-family: 標楷體; font-size: {self.ZH_FONT_SIZE}px; margin: 0; font-weight: bold;">{ch_text}</p>'
+        formatted_en_text = f'<p style="font-family: Times New Roman; font-size: {self.EN_FONT_SIZE}px; margin: 0; font-weight: bold;">{en_text}</p>'
         return formatted_ch_text, formatted_en_text
     
     def type_next_character(self):

@@ -22,7 +22,7 @@ class ContinuousTranslation(QtCore.QObject):
         super().__init__()
         self.signals = signals
         self.init_translation_data()
-        self.translate_client = translate.Client()
+        self.translate_client = translate.TranslationServiceClient()
         self.is_paused = Event()
         self.is_paused.set()
 
@@ -38,19 +38,91 @@ class ContinuousTranslation(QtCore.QObject):
         self.log_file = f"output/{NAME}_log.txt"
         self.output_file_text = f"output/{NAME}_translated_texts.txt"
         self.output_file_translation = f"output/{NAME}_translated_texts_zh-Hant.txt"
+        self.project_id = "tcci-librechat"
+        self.glossary_id = "TCC_MIT"
 
     @staticmethod
     def format_time(seconds: float) -> str:
         delta = timedelta(seconds=seconds)
         formatted_time = str(delta).split('.')[0]
         return formatted_time[2:] if formatted_time.startswith("0:") else formatted_time
+    
+    def translate_text_with_glossary(
+        self,
+        client,
+        text,
+        project_id,
+        glossary_id,
+        source_lang,
+        target_lang
+    ) -> translate.TranslateTextResponse:
+        """Translates a given text using a glossary.
+
+        Args:
+            text: The text to translate.
+            project_id: The ID of the GCP project that owns the glossary.
+            glossary_id: The ID of the glossary to use.
+
+        Returns:
+            The translated text."""
+        location = "global"
+        parent = f"projects/{project_id}/locations/{location}"
+
+        glossary = client.glossary_path(
+            project_id, "global", glossary_id  # The location of the glossary
+        )
+
+        glossary_config = translate.TranslateTextGlossaryConfig(glossary=glossary)
+
+        # Supported language codes: https://cloud.google.com/translate/docs/languages
+        response = client.translate_text(
+            request={
+                "contents": [text],
+                "target_language_code": target_lang,
+                "source_language_code": source_lang,
+                "parent": parent,
+                "glossary_config": glossary_config,
+            }
+        )
+
+        return response.glossary_translations[0].translated_text 
+
+    # Initialize Translation client
+    def translate_text_zh_en(
+        self, client, text: str = "YOUR_TEXT_TO_TRANSLATE", project_id: str = "YOUR_PROJECT_ID"
+    ) -> translate.TranslationServiceClient:
+        """Translating Text."""
+
+        client = translate.TranslationServiceClient()
+
+        location = "global"
+
+        parent = f"projects/{project_id}/locations/{location}"
+
+        # Translate text from English to French
+        # Detail on supported types can be found here:
+        # https://cloud.google.com/translate/docs/supported-formats
+        response = client.translate_text(
+            request={
+                "parent": parent,
+                "contents": [text],
+                "mime_type": "text/plain",  # mime types: text/plain, text/html
+                "source_language_code": "zh-TW",
+                "target_language_code": "en-US",
+            }
+        )
+
+        return response.translations[0].translated_text 
+
 
     def translate_text(self, text, language=None):
         try:
             if language == "en-US":
-                return self.translate_client.translate(text, target_language="zh-TW")['translatedText'], text
+                return self.translate_text_with_glossary(self.translate_client, text, self.project_id, self.glossary_id, "en-US", "zh-TW"), text
+                # return self.translate_client.translate(text, target_language="zh-TW")['translatedText'], text
             else:
-                return text, self.translate_client.translate(text, target_language="en-US")['translatedText']
+                return text, self.translate_text_zh_en(self.translate_client, text, self.project_id)
+            # self.translate_text_with_glossary(self.translate_client, text, self.project_id, "TCC_MIT", "zh-TW", "en-US")
         except Exception as e:
             logger.error(f"Error with translate: {e}")
             return ""
@@ -82,9 +154,7 @@ class ContinuousTranslation(QtCore.QObject):
             region=os.environ.get('SPEECH_REGION'),
         )
         config.speech_recognition_language = "en-US"
-        # config.add_target_language("en-US")
         config.set_property(speechsdk.PropertyId.Speech_LogFilename, "output/speech_log.txt")
-        # config.set_property(speechsdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, "300")
         config.enable_dictation()
         config.set_property(property_id=speechsdk.PropertyId.SpeechServiceResponse_PostProcessingOption, value='TrueText')
         config.set_profanity(speechsdk.ProfanityOption.Raw)
@@ -93,7 +163,12 @@ class ContinuousTranslation(QtCore.QObject):
 
     @staticmethod
     def add_custom_phrases(phrase_list_grammar):
-        phrases = ["Dr. George Westerman", "Dr. Ben Armstrong", "TCC group", "台泥集團", "生成式AI"]
+        phrases = ["Dr. George Westerman", "Dr. Westerman", "Dr. Ben Armstrong", "Dr. Armstrong",
+                   "TCC group", "TCC", "a Senior Lecturer at the MIT Sloan School of Management ",
+                   "a Research Scientist of MIT's Industrial Performance Center",
+                   "Nelson Chang", "Roman Cheng", "程總", "President Cheng", "台泥集團", "生成式AI", "Generative AI",
+                   "Q&A", "舉手按鈕", "Dr.", "博士", "Manufacturing", "製造業", "Digital twin", "數位孿生", "NHOA", "MIT",
+                   "CIMPOR", "CIMPOR Global Holdings","麻省理工學院", "Gallery"]
         for phrase in phrases:
             phrase_list_grammar.addPhrase(phrase)
 
@@ -102,12 +177,11 @@ class ContinuousTranslation(QtCore.QObject):
         recognizer.session_stopped.connect(lambda evt: self.stop_recognition(evt, done))
         recognizer.canceled.connect(lambda evt: self.stop_recognition(evt, done))
         recognizer.recognizing.connect(self.result_callback)
-        # recognizer.recognized.connect(self.result_callback)
         recognizer.recognized.connect(self.recognized_callback)
 
     @staticmethod
     def stop_recognition(evt, done_event):
-        logger.info(f"Stop recodnition by: {evt}")
+        logger.info(f"Stop recognition by: {evt}")
         print(f'SESSION STOPPED: {evt}')
         done_event.set()
 
@@ -126,7 +200,7 @@ class ContinuousTranslation(QtCore.QObject):
                     self.previous_completed_ch, self.previous_completed_en, 
                     self.full_ch, self.full_en,
                     self.is_paused.is_set()
-                    )
+                )
                 self.previous_offset, self.previous_duration = evt.result.offset, evt.result.duration
         except Exception as e:
             logger.error(f"Recognized error: {e}")
@@ -141,8 +215,8 @@ class ContinuousTranslation(QtCore.QObject):
                 self.previous_completed_ch, self.previous_completed_en = self.translate_text(text, language)
                 self.full_ch += self.previous_completed_ch
                 self.full_en += self.previous_completed_en
-                if len(self.full_ch) > 19*10: self.full_ch = self.full_ch[-19*10:]
-                if len(self.full_en) > 60*10: self.full_en = self.full_en[-60*10:]
+                if len(self.full_ch) > 19*8: self.full_ch = self.full_ch[-19*8:]
+                if len(self.full_en) > 60*8: self.full_en = self.full_en[-60*8:]
 
                 self.write_to_file(self.output_file_text, start_time, end_time, self.previous_completed_en)
                 self.write_to_file(self.output_file_translation, start_time, end_time, self.previous_completed_ch)
