@@ -15,14 +15,19 @@ from threading import Thread, Event
 from PySide6 import QtWidgets, QtGui, QtCore
 
 import azure.cognitiveservices.speech as speechsdk
-from google.cloud import translate_v2 as translate
+# from google.cloud import translate_v2 as translate
+from google.cloud import translate
 
+
+# 加載環境變量
 load_dotenv()
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "code/google_tccichat_credentials.json"
+
+# 常量設置
 NAME = "Azure_Dr. George Westerman"
-FILE_NAME = "C:\\Project\\AzureSpeech_Subtitle_Translator\\test_data\\Dr. George Westerman.wav"
-# FILE_NAME = None
-IMAGE_PATH = "code/AI 07a_00000.jpg" #AI 07a_00000.jpg #AI 07a_00001.jpg #background_new_AI.jpg
+# FILE_NAME = r"C:\Users\andy.wang\Desktop\錄音檔案測試_new\2021-Digital-George-Westerman-Dr. George Westerman.wav"
+FILE_NAME = None
+IMAGE_PATH = "code/AI 07a_00001.jpg"
 ZH_FONT_SIZE = [48, 24] 
 EN_FONT_SIZE = [48, 28]
 
@@ -91,14 +96,26 @@ class BaseGUI(QtWidgets.QWidget):
         self.ZH_FONT_SIZE = ZH_FONT_SIZE[0]
         self.EN_FONT_SIZE = EN_FONT_SIZE[0]
 
+    def calculate_line_count(self, text, font_size, widget_width):
+        font = QtGui.QFont("Times New Roman", font_size)
+        font_metrics = QtGui.QFontMetrics(font)
+        lines = text.split('<br>')  # 按 <br> 分隔行
+        line_count = 0
+
+        for line in lines:
+            line_width = font_metrics.horizontalAdvance(line)
+            line_count += (line_width // widget_width) + 1  # 計算當行包含的字數
+
+        return line_count
+    
     def create_scroll_area(self):
         scroll_area = QtWidgets.QScrollArea(self)
         scroll_area.setWidgetResizable(True)
         scroll_area.setStyleSheet(self.scroll_area_stylesheet())
         text_area = QtWidgets.QLabel()
         text_area.setWordWrap(True)
-        text_area.setAlignment(QtCore.Qt.AlignBottom | QtCore.Qt.AlignJustify)
-        text_area.setStyleSheet("background-color: rgba(255, 255, 255, 128); padding: 10px;")
+        text_area.setAlignment(QtCore.Qt.AlignBottom | QtCore.Qt.AlignLeft) # AlignJustify
+        text_area.setStyleSheet("background-color: rgba(255, 255, 255, 230); padding: 10px;")
         scroll_area.setWidget(text_area)
         scroll_area.viewport().setStyleSheet("background-color: rgba(255, 255, 255, 0);")
         return scroll_area, text_area
@@ -132,8 +149,8 @@ class BaseGUI(QtWidgets.QWidget):
         self.scroll_area_bottom.setGeometry(x1, y1_bottom, new_width, new_height)
 
     def format_display_text(self, ch_text: str, en_text: str) -> tuple:
-        formatted_ch_text = f'<p style="font-family: 標楷體; font-size: {self.ZH_FONT_SIZE}px; margin: 0; text-align: center; font-weight: bold;">{ch_text}</p>'
-        formatted_en_text = f'<p style="font-family: Times New Roman; font-size: {self.EN_FONT_SIZE}px; margin: 0; text-align: center; font-weight: bold;">{en_text}</p>'
+        formatted_ch_text = f'<p style="font-family: 標楷體; font-size: {self.ZH_FONT_SIZE}px; margin: 0; font-weight: bold;">{ch_text}</p>'
+        formatted_en_text = f'<p style="font-family: Times New Roman; font-size: {self.EN_FONT_SIZE}px; margin: 0; font-weight: bold;">{en_text}</p>'
         return formatted_ch_text, formatted_en_text
     
     def type_next_character(self):
@@ -178,7 +195,6 @@ class BaseGUI(QtWidgets.QWidget):
         self.timer.timeout.connect(self.type_next_character)
         self.timer.start()
 
-
 class CH2ENGUI(BaseGUI):
     def __init__(self):
         super().__init__("CaptionCraft", 1024, 768)
@@ -188,7 +204,6 @@ class CH2ENGUI(BaseGUI):
 
     def setup_ui(self):
         self.main_layout = QtWidgets.QVBoxLayout(self)
-        # self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.addWidget(self.scroll_area_top, 1)
         self.scroll_area_bottom.setVisible(False) 
 
@@ -230,11 +245,9 @@ class TranslationGUI(BaseGUI):
         self.control_window.window_button.setDisabled(False)
 
     def start_translation(self):
-        if self.ch2en_window: self.ch2en_window.full_en_text = self.full_en_text 
-        # self.ch2en_window.type_string("", "")
+        if self.ch2en_window:
+            self.ch2en_window.full_en_text = self.full_en_text 
         self.translation.is_paused.clear()
-        # self.translation.full_en = ""
-        # self.translation.full_ch = ""
         self.control_window.start_button.setDisabled(True)
         self.control_window.pause_button.setDisabled(False)
 
@@ -245,17 +258,13 @@ class TranslationGUI(BaseGUI):
         self.control_window.pause_button.setDisabled(True)
 
     def clear_history(self):
-        self.translation.full_en = ""
-        self.translation.full_ch = ""
-        if self.ch2en_window: self.ch2en_window.type_string("", "")
-        self.type_string("", "")
+        if self.ch2en_window: 
+            self.ch2en_window.type_string("", "")
 
     def export_current_text(self):
         with open(f"output/{NAME}_QA.txt", "a", encoding="utf-8") as text_file:
-            text_file.write(f"Question: \n")
+            text_file.write("Question: \n")
             text_file.write(self.translation.full_ch + "\n" + self.translation.full_en)
-        # self.translation.full_en = ""
-        # self.translation.full_ch = ""
 
     def find_punctuation_index(self, text, forward=True, max_punctuation=3):
         matches = finditer(r"[.!?。！？]", text)
@@ -269,56 +278,49 @@ class TranslationGUI(BaseGUI):
     def split_text_at_index(self, text, index):
         return text[:index-1], text[index:]
 
+    def format_text(self, ch_text: str, en_text: str, ch_prev_text: str = "", en_prev_text: str = "") -> tuple:
+        while True:
+            ch_idx = self.find_punctuation_index(ch_text)
+            en_idx = self.find_punctuation_index(en_text)
+            if not ch_idx and not en_idx: break
+            if ch_idx: ch_prev_text, ch_text = self.split_text_at_index(ch_text, ch_idx)
+            if en_idx: en_prev_text, en_text = self.split_text_at_index(en_text, en_idx)
 
-    def format_text(self, ch_text: str, en_text: str, ch_prev_text: str, en_prev_text: str, full_ch:str, full_en: str):
-        formatted_ch_text = full_ch + "<br>" + ch_text if full_ch else ch_text
-        formatted_en_text = full_en + "<br>" + en_text if full_en else en_text
-        return formatted_ch_text, formatted_en_text
-    
-    # def format_text(self, ch_text: str, en_text: str, ch_prev_text: str = "", en_prev_text: str = "") -> tuple:
-    #     while True:
-    #         ch_idx = self.find_punctuation_index(ch_text)
-    #         en_idx = self.find_punctuation_index(en_text)
-    #         if not ch_idx and not en_idx: break
-    #         if ch_idx: ch_prev_text, ch_text = self.split_text_at_index(ch_text, ch_idx)
-    #         if en_idx: en_prev_text, en_text = self.split_text_at_index(en_text, en_idx)
+        while True:
+            ch_idx = self.find_punctuation_index(ch_prev_text, False, 3)
+            en_idx = self.find_punctuation_index(en_prev_text, False, 3)
+            if not ch_idx and not en_idx: break
+            if ch_idx: _, ch_prev_text = self.split_text_at_index(ch_prev_text, ch_idx) 
+            if en_idx: _, en_prev_text = self.split_text_at_index(en_prev_text, en_idx)
 
-    #     while True:
-    #         ch_idx = self.find_punctuation_index(ch_prev_text, False, 2)
-    #         en_idx = self.find_punctuation_index(en_prev_text, False, 2)
-    #         if not ch_idx and not en_idx: break
-    #         if ch_idx: _, ch_prev_text = self.split_text_at_index(ch_prev_text, ch_idx) 
-    #         if en_idx: _, en_prev_text = self.split_text_at_index(en_prev_text, en_idx)
+        return ch_text, en_text, ch_prev_text, en_prev_text
 
-    #     return ch_text, en_text, ch_prev_text, en_prev_text
+    def is_synced(self):
+        return len(self.translation.full_ch) == len(self.translation.full_en)
 
-    def update_text(self, ch_text: str, en_text: str, ch_prev_text: str, en_prev_text: str, full_ch:str, full_en: str, is_pause: bool):
-        formatted_ch_text, formatted_en_text = self.format_text(ch_text, en_text, ch_prev_text, en_prev_text, full_ch, full_en)
-        self.type_string(formatted_ch_text, formatted_en_text)
-        if not self.translation.is_paused.is_set() and self.ch2en_window:
-            self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
-        
-        # ch_text, en_text, ch_prev_text, en_prev_text = self.format_text(ch_text, en_text, ch_prev_text, en_prev_text)
-        # formatted_ch_text = ch_prev_text + "<br>" + ch_text if full_ch else ch_text
-        # formatted_en_text = en_prev_text + "<br>" + en_text if full_en else en_text
-        # if self.translation.is_paused.is_set():
-        #     self.type_string(formatted_ch_text, formatted_en_text)
-        #     if self.is_synced:
-        #         self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
-        # else:
-        #     if self.is_synced:
-        #         formatted_ch_text, formatted_en_text = self.ch2en_window.format_text(ch_text, en_text, ch_prev_text, en_prev_text, full_ch, full_en)
-        #         self.type_string(formatted_ch_text, formatted_en_text)
-        #         self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
-        #     else:
-        #         self.type_string(formatted_ch_text, formatted_en_text)
-        
+    def update_text(self, ch_text: str, en_text: str, ch_prev_text: str, en_prev_text: str, full_ch: str, full_en: str, is_pause: bool):
+        ch_text, en_text, ch_prev_text, en_prev_text = self.format_text(ch_text, en_text, ch_prev_text, en_prev_text)
+        formatted_ch_text = ch_prev_text + "<br>" + ch_text if full_ch else ch_text
+        formatted_en_text = en_prev_text + "<br>" + en_text if full_en else en_text
+
+        if self.translation.is_paused.is_set():
+            self.type_string(formatted_ch_text, formatted_en_text)
+            if self.is_synced() and self.ch2en_window:
+                self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
+        else:
+            if self.is_synced() and self.ch2en_window:
+                formatted_ch_text, formatted_en_text = self.ch2en_window.format_text(ch_text, en_text, ch_prev_text, en_prev_text, full_ch, full_en)
+                self.type_string(formatted_ch_text, formatted_en_text)
+                self.ch2en_window.type_string(formatted_ch_text, formatted_en_text)
+            else:
+                self.type_string(formatted_ch_text, formatted_en_text)
+
 class ContinuousTranslation(QtCore.QObject):
     def __init__(self, signals):
         super().__init__()
         self.signals = signals
         self.init_translation_data()
-        self.translate_client = translate.Client()
+        self.translate_client = translate.TranslationServiceClient()
         self.is_paused = Event()
         self.is_paused.set()
 
@@ -334,19 +336,91 @@ class ContinuousTranslation(QtCore.QObject):
         self.log_file = f"output/{NAME}_log.txt"
         self.output_file_text = f"output/{NAME}_translated_texts.txt"
         self.output_file_translation = f"output/{NAME}_translated_texts_zh-Hant.txt"
+        self.project_id = "tcci-librechat"
+        self.glossary_id = "TCC_MIT"
 
     @staticmethod
     def format_time(seconds: float) -> str:
         delta = timedelta(seconds=seconds)
         formatted_time = str(delta).split('.')[0]
         return formatted_time[2:] if formatted_time.startswith("0:") else formatted_time
+    
+    def translate_text_with_glossary(
+        self,
+        client,
+        text,
+        project_id,
+        glossary_id,
+        source_lang,
+        target_lang
+    ) -> translate.TranslateTextResponse:
+        """Translates a given text using a glossary.
+
+        Args:
+            text: The text to translate.
+            project_id: The ID of the GCP project that owns the glossary.
+            glossary_id: The ID of the glossary to use.
+
+        Returns:
+            The translated text."""
+        location = "global"
+        parent = f"projects/{project_id}/locations/{location}"
+
+        glossary = client.glossary_path(
+            project_id, "global", glossary_id  # The location of the glossary
+        )
+
+        glossary_config = translate.TranslateTextGlossaryConfig(glossary=glossary)
+
+        # Supported language codes: https://cloud.google.com/translate/docs/languages
+        response = client.translate_text(
+            request={
+                "contents": [text],
+                "target_language_code": target_lang,
+                "source_language_code": source_lang,
+                "parent": parent,
+                "glossary_config": glossary_config,
+            }
+        )
+
+        return response.glossary_translations[0].translated_text 
+
+    # Initialize Translation client
+    def translate_text_zh_en(
+        self, client, text: str = "YOUR_TEXT_TO_TRANSLATE", project_id: str = "YOUR_PROJECT_ID"
+    ) -> translate.TranslationServiceClient:
+        """Translating Text."""
+
+        client = translate.TranslationServiceClient()
+
+        location = "global"
+
+        parent = f"projects/{project_id}/locations/{location}"
+
+        # Translate text from English to French
+        # Detail on supported types can be found here:
+        # https://cloud.google.com/translate/docs/supported-formats
+        response = client.translate_text(
+            request={
+                "parent": parent,
+                "contents": [text],
+                "mime_type": "text/plain",  # mime types: text/plain, text/html
+                "source_language_code": "zh-TW",
+                "target_language_code": "en-US",
+            }
+        )
+
+        return response.translations[0].translated_text 
+
 
     def translate_text(self, text, language=None):
         try:
             if language == "en-US":
-                return self.translate_client.translate(text, target_language="zh-TW")['translatedText'], text
+                return self.translate_text_with_glossary(self.translate_client, text, self.project_id, self.glossary_id, "en-US", "zh-TW"), text
+                # return self.translate_client.translate(text, target_language="zh-TW")['translatedText'], text
             else:
-                return text, self.translate_client.translate(text, target_language="en-US")['translatedText']
+                return text, self.translate_text_zh_en(self.translate_client, text, self.project_id)
+            # self.translate_text_with_glossary(self.translate_client, text, self.project_id, "TCC_MIT", "zh-TW", "en-US")
         except Exception as e:
             logger.error(f"Error with translate: {e}")
             return ""
@@ -378,9 +452,7 @@ class ContinuousTranslation(QtCore.QObject):
             region=os.environ.get('SPEECH_REGION'),
         )
         config.speech_recognition_language = "en-US"
-        # config.add_target_language("en-US")
         config.set_property(speechsdk.PropertyId.Speech_LogFilename, "output/speech_log.txt")
-        # config.set_property(speechsdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, "300")
         config.enable_dictation()
         config.set_property(property_id=speechsdk.PropertyId.SpeechServiceResponse_PostProcessingOption, value='TrueText')
         config.set_profanity(speechsdk.ProfanityOption.Raw)
@@ -389,7 +461,12 @@ class ContinuousTranslation(QtCore.QObject):
 
     @staticmethod
     def add_custom_phrases(phrase_list_grammar):
-        phrases = ["Dr. George Westerman", "Dr. Ben Armstrong", "TCC group", "台泥集團", "生成式AI"]
+        phrases = ["Dr. George Westerman", "Dr. Westerman", "Dr. Ben Armstrong", "Dr. Armstrong",
+                   "TCC group", "TCC", "a Senior Lecturer at the MIT Sloan School of Management ",
+                   "a Research Scientist of MIT's Industrial Performance Center",
+                   "Nelson Chang", "Roman Cheng", "程總", "President Cheng", "台泥集團", "生成式AI", "Generative AI",
+                   "Q&A", "舉手按鈕", "Dr.", "博士", "Manufacturing", "製造業", "Digital twin", "數位孿生", "NHOA", "MIT",
+                   "CIMPOR", "CIMPOR Global Holdings","麻省理工學院", "Gallery"]
         for phrase in phrases:
             phrase_list_grammar.addPhrase(phrase)
 
@@ -398,12 +475,11 @@ class ContinuousTranslation(QtCore.QObject):
         recognizer.session_stopped.connect(lambda evt: self.stop_recognition(evt, done))
         recognizer.canceled.connect(lambda evt: self.stop_recognition(evt, done))
         recognizer.recognizing.connect(self.result_callback)
-        # recognizer.recognized.connect(self.result_callback)
         recognizer.recognized.connect(self.recognized_callback)
 
     @staticmethod
     def stop_recognition(evt, done_event):
-        logger.info(f"Stop recodnition by: {evt}")
+        logger.info(f"Stop recognition by: {evt}")
         print(f'SESSION STOPPED: {evt}')
         done_event.set()
 
@@ -422,7 +498,7 @@ class ContinuousTranslation(QtCore.QObject):
                     self.previous_completed_ch, self.previous_completed_en, 
                     self.full_ch, self.full_en,
                     self.is_paused.is_set()
-                    )
+                )
                 self.previous_offset, self.previous_duration = evt.result.offset, evt.result.duration
         except Exception as e:
             logger.error(f"Recognized error: {e}")
@@ -437,8 +513,8 @@ class ContinuousTranslation(QtCore.QObject):
                 self.previous_completed_ch, self.previous_completed_en = self.translate_text(text, language)
                 self.full_ch += self.previous_completed_ch
                 self.full_en += self.previous_completed_en
-                if len(self.full_ch) > 19*10: self.full_ch = self.full_ch[-19*10:]
-                if len(self.full_en) > 60*10: self.full_en = self.full_en[-60*10:]
+                if len(self.full_ch) > 19*8: self.full_ch = self.full_ch[-19*8:]
+                if len(self.full_en) > 60*8: self.full_en = self.full_en[-60*8:]
 
                 self.write_to_file(self.output_file_text, start_time, end_time, self.previous_completed_en)
                 self.write_to_file(self.output_file_translation, start_time, end_time, self.previous_completed_ch)
