@@ -10,7 +10,7 @@ from threading import Event
 from PySide6 import QtCore
 
 import azure.cognitiveservices.speech as speechsdk
-from google.cloud import translate_v2 as translate
+from google.cloud import translate
 
 load_dotenv()
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "code/google_tccichat_credentials.json"
